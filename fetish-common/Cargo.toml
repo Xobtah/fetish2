@@ -15,3 +15,4 @@ serde = { workspace = true, features = [] }
 serde_json = { workspace = true, features = [] }
 tdlib = { workspace = true, features = [] }
 tokio = { workspace = true, features = [] }
+unidecode = { workspace = true, features = [] }

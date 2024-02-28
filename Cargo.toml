@@ -19,3 +19,4 @@ serde = { version = "1.0.197", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0.114", default-features = false }
 tdlib = { version = "0.10.0", default-features = false }
 tokio = { version = "1.36", default-features = false, features = ["full"] }
+unidecode = { version = "0.3.0", default-features = false }

@@ -1,3 +1,5 @@
+use std::fs;
+
 use async_trait::async_trait;
 use log::{debug, error, info, trace};
 use tdlib::{
@@ -5,6 +7,7 @@ use tdlib::{
     functions,
     types::{FormattedText, InputMessageText, Message, MessageSenderUser},
 };
+use unidecode::unidecode;
 
 use crate::{
     application::ApplicationData,
@@ -19,10 +22,7 @@ pub struct MessageState;
 
 #[async_trait]
 impl ApplicationState for MessageState {
-    async fn run(
-        &self,
-        mut app_data: ApplicationData,
-    ) -> FetishResult<ApplicationData> {
+    async fn run(&self, mut app_data: ApplicationData) -> FetishResult<ApplicationData> {
         let (message_to_send_tx, message_to_send_rx) = tokio::sync::mpsc::unbounded_channel();
         let shutdown_rx = app_data.shutdown_rx.resubscribe();
         debug!("Starting message sender");
@@ -63,14 +63,23 @@ async fn handle_message(
 ) -> FetishResult<()> {
     match &message.content {
         MessageContent::MessageText(message_text) => {
-            info!("{}: {}", message.chat_id, message_text.text.text);
-            if message.chat_id == -4162067427 {
+            // Debug message.chat_id == -4162067427
+            let text = message_text.text.text.clone();
+            info!("{}: {text}", message.chat_id);
+            let text = unidecode(text.to_uppercase().as_str());
+            let sanction = fs::read_to_string("res/message.txt")?;
+            if serde_json::from_str::<Vec<String>>(
+                fs::read_to_string("res/keywords.json")?.as_str(),
+            )?
+            .into_iter()
+            .any(|keyword| text.contains(&keyword))
+            {
                 message_to_send_tx
                     .send((
                         message,
                         InputMessageContent::InputMessageText(InputMessageText {
                             text: FormattedText {
-                                text: "This message is sent from a bot".into(),
+                                text: sanction.into(),
                                 entities: vec![],
                             },
                             disable_web_page_preview: true,
@@ -91,7 +100,7 @@ async fn handle_message(
 mod message_sender {
     use std::time;
 
-    use log::{debug, error, info, trace};
+    use log::{debug, error, info};
     use rand::Rng;
     use tdlib::{enums::MessageReplyTo, types::MessageReplyToMessage};
     use tokio::sync::{broadcast, mpsc};
@@ -140,7 +149,7 @@ mod message_sender {
                     debug!("{:#?}", message.content);
                     let (min, max) = (1000, 3000);
                     let waiting_time = (rand::thread_rng().gen::<f64>() * (max - min) as f64) as u64 + min;
-                    trace!("Waiting for {waiting_time} ms");
+                    debug!("Waiting for {waiting_time} ms");
                     tokio::time::sleep(time::Duration::from_millis(waiting_time)).await;
                     if let Err(e) = tdlib::functions::send_message(
                         message.chat_id,
