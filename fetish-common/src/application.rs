@@ -38,8 +38,7 @@ impl Application {
         debug!("Client ID '{client_id}' created");
 
         let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
-        let (shutdown_update_dispatcher_tx, shutdown_update_dispatcher_rx) =
-            broadcast::channel(1);
+        let (shutdown_update_dispatcher_tx, shutdown_update_dispatcher_rx) = broadcast::channel(1);
         let (auth_tx, auth_rx) = mpsc::unbounded_channel();
         let (message_tx, message_rx) = mpsc::unbounded_channel();
 
@@ -64,7 +63,7 @@ impl Application {
 
             debug!("Running state machine");
             for state in self.states {
-                app_data = state.run(app_data).await.unwrap(); // TODO handle errors
+                app_data = state.run(app_data).await.unwrap();
             }
             debug!("State machine finished");
         });

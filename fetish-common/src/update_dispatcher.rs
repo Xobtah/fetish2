@@ -73,7 +73,7 @@ impl UpdateDispatcher {
         loop {
             tokio::select! {
                 Some((update, _)) = tdlib_update_stream.next() => {
-                    trace!("{update:#?}");
+                    trace!("{update:?}");
                     if let Err(_) = self.handle_update(update) {
                         error!("Update dispatch error");
                     }
@@ -90,13 +90,9 @@ impl UpdateDispatcher {
     fn handle_update(&self, update: Update) -> Result<(), UpdateDispatchError> {
         match update {
             Update::AuthorizationState(update) => {
-                debug!("Handling authorization state update");
                 Ok(self.auth_tx.send(update.authorization_state)?)
             }
-            Update::NewMessage(message) => {
-                debug!("Handling new message");
-                Ok(self.message_tx.send(message.message)?)
-            }
+            Update::NewMessage(message) => Ok(self.message_tx.send(message.message)?),
             _ => Ok(()),
         }
     }

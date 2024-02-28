@@ -6,7 +6,17 @@ use crate::{application::ApplicationData, error::FetishResult, utils::ask_user};
 
 use super::ApplicationState;
 
-pub struct LoginState;
+pub struct LoginState {
+    database_name: String,
+}
+
+impl LoginState {
+    pub fn new(db_name: &str) -> Self {
+        Self {
+            database_name: db_name.to_owned(),
+        }
+    }
+}
 
 #[async_trait]
 impl ApplicationState for LoginState {
@@ -22,9 +32,9 @@ impl ApplicationState for LoginState {
                         debug!("Setting TDLib parameters");
                         let response = functions::set_tdlib_parameters(
                             false,
-                            "me_db".into(),
-                            String::new(),
-                            String::new(),
+                            self.database_name.to_owned(),
+                            Default::default(),
+                            Default::default(),
                             true,
                             true,
                             true,
@@ -33,7 +43,7 @@ impl ApplicationState for LoginState {
                             include_str!("../../../app.hash").into(),
                             "en".into(),
                             "Desktop".into(),
-                            String::new(),
+                            Default::default(),
                             env!("CARGO_PKG_VERSION").into(),
                             false,
                             true,
@@ -48,7 +58,7 @@ impl ApplicationState for LoginState {
                     AuthorizationState::WaitPhoneNumber => loop {
                         debug!("Waiting for phone number");
                         let input =
-                            ask_user("Enter your phone number (include the country calling code):");
+                            ask_user("Enter your phone number (include the country calling code):")?;
                         let response = functions::set_authentication_phone_number(
                             input,
                             None,
@@ -62,7 +72,7 @@ impl ApplicationState for LoginState {
                     },
                     AuthorizationState::WaitCode(_) => loop {
                         debug!("Waiting for code");
-                        let input = ask_user("Enter the verification code:");
+                        let input = ask_user("Enter the verification code:")?;
                         let response =
                             functions::check_authentication_code(input, app_data.client_id)
                                 .await;
@@ -73,7 +83,7 @@ impl ApplicationState for LoginState {
                     },
                     AuthorizationState::WaitPassword(_) => loop {
                         debug!("Waiting for password");
-                        let input = ask_user("Enter the password:");
+                        let input = ask_user("Enter the password:")?;
                         let response =
                             functions::check_authentication_password(input, app_data.client_id)
                                 .await;

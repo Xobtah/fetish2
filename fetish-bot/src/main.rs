@@ -7,14 +7,8 @@ use fetish_common::{
 #[tokio::main]
 async fn main() -> FetishResult<()> {
     env_logger::init();
-    // Application::new()
-    //     .add_state::<LoginState>()
-    //     .add_state::<MessageState>()
-    //     .add_state::<ClosingState>()
-    //     .run()
-    //     .await
     Application::new()
-        .add_state(LoginState)
+        .add_state(LoginState::new("db_me"))
         .add_state(MessageState)
         .add_state(ClosingState)
         .run()

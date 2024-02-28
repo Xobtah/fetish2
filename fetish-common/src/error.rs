@@ -12,6 +12,8 @@ pub enum FetishError {
     Io(io::Error),
     TokioSend(SendError<()>),
     MessageHandle,
+    SerdeJson(serde_json::Error),
+    Dialoguer(dialoguer::Error),
 }
 
 impl From<Error> for FetishError {
@@ -35,5 +37,17 @@ impl From<io::Error> for FetishError {
 impl From<SendError<()>> for FetishError {
     fn from(error: SendError<()>) -> Self {
         FetishError::TokioSend(error)
+    }
+}
+
+impl From<serde_json::Error> for FetishError {
+    fn from(error: serde_json::Error) -> Self {
+        FetishError::SerdeJson(error)
+    }
+}
+
+impl From<dialoguer::Error> for FetishError {
+    fn from(error: dialoguer::Error) -> Self {
+        FetishError::Dialoguer(error)
     }
 }
