@@ -39,6 +39,7 @@ impl ApplicationState for MessageState {
                         MessageSender::User(MessageSenderUser { user_id }) => if user_id == me.id { continue; },
                         _ => ()
                     }
+                    if message.chat_id >= 0 { continue; }
                     if let Err(e) = handle_message(&message_to_send_tx, message, app_data.client_id).await {
                         error!("Failed to handle message: {e:#?}");
                     }
@@ -107,49 +108,21 @@ mod message_sender {
 
     use super::SendMessageData;
 
-    // struct Chrono {
-    //     start: time::Instant,
-    //     duration: time::Duration,
-    // }
-
-    // impl Chrono {
-    //     fn init() -> Self {
-    //         Self {
-    //             start: time::Instant::now(),
-    //             duration: Default::default(),
-    //         }
-    //     }
-
-    //     fn start(&mut self, duration: time::Duration) -> Self {
-    //         trace!("Starting chrono for {duration:#?}");
-    //         Self {
-    //             start: time::Instant::now(),
-    //             duration,
-    //         }
-    //     }
-
-    //     fn is_elapsed(&self) -> bool {
-    //         trace!(":) {:#?}", self.start.elapsed());
-    //         self.start.elapsed() >= self.duration
-    //     }
-    // }
-
     pub async fn run(
         mut shutdown_rx: broadcast::Receiver<()>,
         mut message_to_send_rx: mpsc::UnboundedReceiver<SendMessageData>,
     ) {
         debug!("Starting message sender");
-        // let mut chrono = Chrono::init();
 
         loop {
             tokio::select! {
-                Some(send_message_data) = message_to_send_rx.recv()/*, if chrono.is_elapsed()*/ => {
+                Some(send_message_data) = message_to_send_rx.recv() => {
                     let (message, input_message, client_id) = send_message_data;
                     info!("Sending message");
                     debug!("{:#?}", message.content);
-                    let (min, max) = (1000, 3000);
+                    let (min, max) = (3000, 6000);
                     let waiting_time = (rand::thread_rng().gen::<f64>() * (max - min) as f64) as u64 + min;
-                    debug!("Waiting for {waiting_time} ms");
+                    info!("Waiting for {waiting_time} ms");
                     tokio::time::sleep(time::Duration::from_millis(waiting_time)).await;
                     if let Err(e) = tdlib::functions::send_message(
                         message.chat_id,
@@ -166,7 +139,6 @@ mod message_sender {
                     {
                         error!("Failed to send message: {e:#?}");
                     }
-                    // chrono = chrono.start(time::Duration::from_millis(waiting_time));
                 }
                 _ = shutdown_rx.recv() => {
                     debug!("Shutting down message sender");

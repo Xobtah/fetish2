@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use log::{debug, info};
 use tdlib::{enums::AuthorizationState, types::Message};
 use tokio::{
@@ -5,7 +7,7 @@ use tokio::{
     sync::{broadcast, mpsc},
 };
 
-use crate::{error::FetishResult, state::ApplicationState, update_dispatcher::UpdateDispatcher};
+use crate::{error::FetishResult, states::ApplicationState, update_dispatcher::UpdateDispatcher};
 
 pub struct ApplicationData {
     pub client_id: i32,
@@ -31,7 +33,7 @@ impl Application {
         self
     }
 
-    pub async fn run(self) -> FetishResult<()> {
+    pub async fn run(self, db_path: &Path) -> FetishResult<()> {
         info!("Fetish started");
 
         let client_id = tdlib::create_client();
@@ -45,7 +47,7 @@ impl Application {
         // The update receiver is a separate task that listens for updates from the TDLib client
         // It must be spawned before any other task that sends updates to the client
         let update_dispatcher_handle = tokio::spawn(
-            UpdateDispatcher::new(shutdown_update_dispatcher_rx, auth_tx, message_tx).run(),
+            UpdateDispatcher::new(shutdown_update_dispatcher_rx, auth_tx, message_tx, db_path)?.run(),
         );
 
         let mut sigint = unix::signal(unix::SignalKind::interrupt())?;

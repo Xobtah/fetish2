@@ -14,6 +14,7 @@ pub enum FetishError {
     MessageHandle,
     SerdeJson(serde_json::Error),
     Dialoguer(dialoguer::Error),
+    Rusqlite(rusqlite::Error),
 }
 
 impl From<Error> for FetishError {
@@ -49,5 +50,11 @@ impl From<serde_json::Error> for FetishError {
 impl From<dialoguer::Error> for FetishError {
     fn from(error: dialoguer::Error) -> Self {
         FetishError::Dialoguer(error)
+    }
+}
+
+impl From<rusqlite::Error> for FetishError {
+    fn from(error: rusqlite::Error) -> Self {
+        FetishError::Rusqlite(error)
     }
 }

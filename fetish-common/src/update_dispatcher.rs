@@ -1,4 +1,5 @@
 use std::{
+    path::Path,
     pin::Pin,
     task::{Context, Poll},
 };
@@ -12,6 +13,12 @@ use tdlib::{
 use tokio::sync::{
     broadcast,
     mpsc::{self, error::SendError},
+};
+
+use crate::{
+    database::Database,
+    error::FetishResult,
+    models::{chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, user_wrapper::UserWrapper},
 };
 
 struct UpdateStream;
@@ -50,6 +57,7 @@ pub struct UpdateDispatcher {
     shutdown_rx: broadcast::Receiver<()>,
     auth_tx: mpsc::UnboundedSender<AuthorizationState>,
     message_tx: mpsc::UnboundedSender<Message>,
+    db: Database,
 }
 
 impl UpdateDispatcher {
@@ -57,13 +65,15 @@ impl UpdateDispatcher {
         shutdown_rx: broadcast::Receiver<()>,
         auth_tx: mpsc::UnboundedSender<AuthorizationState>,
         message_tx: mpsc::UnboundedSender<Message>,
-    ) -> Self {
+        db_path: &Path,
+    ) -> FetishResult<Self> {
         debug!("Creating update dispatcher");
-        Self {
+        Ok(Self {
             shutdown_rx,
             auth_tx,
             message_tx,
-        }
+            db: Database::new(db_path)?,
+        })
     }
 
     pub async fn run(mut self) {
@@ -92,7 +102,30 @@ impl UpdateDispatcher {
             Update::AuthorizationState(update) => {
                 Ok(self.auth_tx.send(update.authorization_state)?)
             }
-            Update::NewMessage(message) => Ok(self.message_tx.send(message.message)?),
+            Update::NewMessage(message) => {
+                debug!("New message: {:#?}", message.message.content);
+                trace!("{:#?}", message.message);
+                if let Err(e) = self.db.save(&MessageWrapper::from(&message.message)) {
+                    error!("{e:#?}");
+                }
+                Ok(self.message_tx.send(message.message)?)
+            }
+            Update::NewChat(tdlib::types::UpdateNewChat { chat }) => {
+                debug!("New chat: {:#?}", chat.title);
+                trace!("{chat:#?}");
+                if let Err(e) = self.db.save(&ChatWrapper::from(&chat)) {
+                    error!("{e:#?}");
+                }
+                Ok(())
+            }
+            Update::User(tdlib::types::UpdateUser { user }) => {
+                debug!("New user: [ {}, {}, '{:#?}' ]", user.first_name, user.last_name, user.usernames);
+                trace!("{user:#?}");
+                if let Err(e) = self.db.save(&UserWrapper::from(&user)) {
+                    error!("{e:#?}");
+                }
+                Ok(())
+            }
             _ => Ok(()),
         }
     }

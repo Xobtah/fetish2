@@ -1,8 +1,9 @@
 use async_trait::async_trait;
+use dialoguer::{theme::ColorfulTheme, Input};
 use log::{debug, error};
 use tdlib::{enums::AuthorizationState, functions};
 
-use crate::{application::ApplicationData, error::FetishResult, utils::ask_user};
+use crate::{application::ApplicationData, error::FetishResult};
 
 use super::ApplicationState;
 
@@ -108,4 +109,12 @@ impl ApplicationState for LoginState {
         debug!("Logged in");
         Ok(app_data)
     }
+}
+
+fn ask_user(prompt: &str) -> FetishResult<String> {
+    Ok(Input::<String>::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt)
+        .interact_text()?
+        .trim()
+        .into())
 }
