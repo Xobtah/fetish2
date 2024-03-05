@@ -104,13 +104,8 @@ fn is_scam_message(message: &Message) -> FetishResult<bool> {
     match &message.content {
         MessageContent::MessageText(message_text) => {
             let text = message_text.text.text.clone();
-            info!(
-                "{}: {}{}",
-                message.chat_id,
-                &text[0..30],
-                if text.len() > 30 { "..." } else { "" }
-            );
             let text = unidecode(text.to_uppercase().as_str());
+            info!("{}: {text}", message.chat_id,);
             let is_scam = serde_json::from_str::<Vec<String>>(
                 fs::read_to_string("res/keywords.json")?.as_str(),
             )?

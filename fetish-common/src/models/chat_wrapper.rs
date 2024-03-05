@@ -25,6 +25,12 @@ impl From<Chat> for ChatWrapper {
     }
 }
 
+impl Into<Chat> for ChatWrapper {
+    fn into(self) -> Chat {
+        self.0
+    }
+}
+
 impl Serialize for ChatWrapper {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

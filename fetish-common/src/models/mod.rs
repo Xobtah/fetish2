@@ -1,9 +1,11 @@
 use crate::error::FetishResult;
 
+pub mod basic_group_wrapper;
 pub mod chat_wrapper;
 pub mod message_wrapper;
 pub mod scammer;
 pub mod scouted_chat;
+pub mod supergroup_wrapper;
 pub mod user_wrapper;
 
 pub trait AutoRequestable {

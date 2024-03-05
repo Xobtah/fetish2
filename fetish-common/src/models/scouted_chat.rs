@@ -1,3 +1,4 @@
+use log::info;
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,10 @@ impl AutoRequestable for ScoutedChat {
     }
 
     fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        if let Some(_) = Self::select_by_id(self.chat_id, conn)? {
+            info!("Chat {} already scouted", self.chat_id);
+            return Ok(());
+        }
         conn.execute(
             "INSERT INTO SCOUTED_CHATS (chat_id, location, scouted_at) VALUES (?1, ?2, ?3)",
             rusqlite::params![self.chat_id, self.location, self.scouted_at],

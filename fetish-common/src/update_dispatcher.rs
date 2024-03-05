@@ -19,7 +19,9 @@ use crate::{
     database::Database,
     error::FetishResult,
     models::{
-        chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, user_wrapper::UserWrapper,
+        basic_group_wrapper::BasicGroupWrapper, chat_wrapper::ChatWrapper,
+        message_wrapper::MessageWrapper, supergroup_wrapper::SupergroupWrapper,
+        user_wrapper::UserWrapper,
     },
 };
 
@@ -125,6 +127,32 @@ impl UpdateDispatcher {
                 debug!("New chat: {}", chat.title);
                 trace!("{chat:#?}");
                 if let Err(e) = self.db.lock().unwrap().save(&ChatWrapper::from(chat)) {
+                    error!("{e:#?}");
+                }
+                Ok(())
+            }
+            Update::Supergroup(tdlib::types::UpdateSupergroup { supergroup }) => {
+                debug!("New supergroup: {}", supergroup.id);
+                trace!("{supergroup:#?}");
+                if let Err(e) = self
+                    .db
+                    .lock()
+                    .unwrap()
+                    .save(&SupergroupWrapper::from(supergroup))
+                {
+                    error!("{e:#?}");
+                }
+                Ok(())
+            }
+            Update::BasicGroup(tdlib::types::UpdateBasicGroup { basic_group }) => {
+                debug!("New basic group: {}", basic_group.id);
+                trace!("{basic_group:#?}");
+                if let Err(e) = self
+                    .db
+                    .lock()
+                    .unwrap()
+                    .save(&BasicGroupWrapper::from(basic_group))
+                {
                     error!("{e:#?}");
                 }
                 Ok(())

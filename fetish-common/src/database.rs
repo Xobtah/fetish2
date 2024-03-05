@@ -7,7 +7,7 @@ use rusqlite::Connection;
 use crate::{
     error::FetishResult,
     models::{
-        chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, scammer::Scammer, scouted_chat::ScoutedChat, user_wrapper::UserWrapper, AutoRequestable
+        basic_group_wrapper::BasicGroupWrapper, chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, scammer::Scammer, scouted_chat::ScoutedChat, supergroup_wrapper::SupergroupWrapper, user_wrapper::UserWrapper, AutoRequestable
     },
 };
 
@@ -23,11 +23,13 @@ impl Database {
         debug!("Creating database '{}'", db_path.display());
         let conn = Connection::open(db_path)?;
 
-        conn.execute(&ScoutedChat::create_table_request(), rusqlite::params![])?;
+        conn.execute(&BasicGroupWrapper::create_table_request(), rusqlite::params![])?;
         conn.execute(&ChatWrapper::create_table_request(), rusqlite::params![])?;
         conn.execute(&MessageWrapper::create_table_request(), rusqlite::params![])?;
-        conn.execute(&UserWrapper::create_table_request(), rusqlite::params![])?;
         conn.execute(&Scammer::create_table_request(), rusqlite::params![])?;
+        conn.execute(&ScoutedChat::create_table_request(), rusqlite::params![])?;
+        conn.execute(&SupergroupWrapper::create_table_request(), rusqlite::params![])?;
+        conn.execute(&UserWrapper::create_table_request(), rusqlite::params![])?;
 
         Ok(Self { conn })
     }
