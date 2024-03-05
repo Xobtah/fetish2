@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use log::{debug, info};
 use tdlib::{enums::AuthorizationState, types::Message};
@@ -7,13 +10,17 @@ use tokio::{
     sync::{broadcast, mpsc},
 };
 
-use crate::{error::FetishResult, states::ApplicationState, update_dispatcher::UpdateDispatcher};
+use crate::{
+    database::Database, error::FetishResult, states::ApplicationState,
+    update_dispatcher::UpdateDispatcher,
+};
 
 pub struct ApplicationData {
     pub client_id: i32,
     pub auth_rx: mpsc::UnboundedReceiver<AuthorizationState>,
     pub message_rx: mpsc::UnboundedReceiver<Message>,
     pub shutdown_rx: tokio::sync::broadcast::Receiver<()>,
+    pub db: Arc<Mutex<Database>>,
 }
 
 unsafe impl Send for ApplicationData {}
@@ -39,6 +46,8 @@ impl Application {
         let client_id = tdlib::create_client();
         debug!("Client ID '{client_id}' created");
 
+        let db = Arc::new(Mutex::new(Database::new(db_path)?));
+
         let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
         let (shutdown_update_dispatcher_tx, shutdown_update_dispatcher_rx) = broadcast::channel(1);
         let (auth_tx, auth_rx) = mpsc::unbounded_channel();
@@ -47,13 +56,14 @@ impl Application {
         // The update receiver is a separate task that listens for updates from the TDLib client
         // It must be spawned before any other task that sends updates to the client
         let update_dispatcher_handle = tokio::spawn(
-            UpdateDispatcher::new(shutdown_update_dispatcher_rx, auth_tx, message_tx, db_path)?.run(),
+            UpdateDispatcher::new(
+                shutdown_update_dispatcher_rx,
+                auth_tx,
+                message_tx,
+                db.clone(),
+            )?
+            .run(),
         );
-
-        let mut sigint = unix::signal(unix::SignalKind::interrupt())?;
-        let mut sigterm = unix::signal(unix::SignalKind::terminate())?;
-        let mut sighup = unix::signal(unix::SignalKind::hangup())?;
-        let mut sigquit = unix::signal(unix::SignalKind::quit())?;
 
         let mut state_machine_handle = tokio::spawn(async move {
             let mut app_data = ApplicationData {
@@ -61,6 +71,7 @@ impl Application {
                 auth_rx,
                 message_rx,
                 shutdown_rx,
+                db
             };
 
             debug!("Running state machine");
@@ -69,6 +80,11 @@ impl Application {
             }
             debug!("State machine finished");
         });
+
+        let mut sigint = unix::signal(unix::SignalKind::interrupt())?;
+        let mut sigterm = unix::signal(unix::SignalKind::terminate())?;
+        let mut sighup = unix::signal(unix::SignalKind::hangup())?;
+        let mut sigquit = unix::signal(unix::SignalKind::quit())?;
 
         loop {
             tokio::select! {

@@ -7,8 +7,7 @@ use rusqlite::Connection;
 use crate::{
     error::FetishResult,
     models::{
-        chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, user_wrapper::UserWrapper,
-        AutoRequestable,
+        chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, scammer::Scammer, scouted_chat::ScoutedChat, user_wrapper::UserWrapper, AutoRequestable
     },
 };
 
@@ -24,9 +23,11 @@ impl Database {
         debug!("Creating database '{}'", db_path.display());
         let conn = Connection::open(db_path)?;
 
+        conn.execute(&ScoutedChat::create_table_request(), rusqlite::params![])?;
         conn.execute(&ChatWrapper::create_table_request(), rusqlite::params![])?;
         conn.execute(&MessageWrapper::create_table_request(), rusqlite::params![])?;
         conn.execute(&UserWrapper::create_table_request(), rusqlite::params![])?;
+        conn.execute(&Scammer::create_table_request(), rusqlite::params![])?;
 
         Ok(Self { conn })
     }
@@ -37,5 +38,9 @@ impl Database {
     ) -> FetishResult<()> {
         entity.insert(&self.conn)?;
         Ok(())
+    }
+
+    pub fn load<DatabaseEntity: AutoRequestable>(&self, id: i64) -> FetishResult<Option<DatabaseEntity>> {
+        DatabaseEntity::select_by_id(id, &self.conn)
     }
 }

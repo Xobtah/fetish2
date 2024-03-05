@@ -1,4 +1,7 @@
-use std::fs;
+use std::{
+    fs,
+    sync::{Arc, Mutex},
+};
 
 use async_trait::async_trait;
 use log::{debug, error, info, trace};
@@ -11,7 +14,9 @@ use unidecode::unidecode;
 
 use crate::{
     application::ApplicationData,
+    database::Database,
     error::{FetishError, FetishResult},
+    models::scammer::Scammer,
 };
 
 use super::ApplicationState;
@@ -35,13 +40,38 @@ impl ApplicationState for MessageState {
         loop {
             tokio::select! {
                 Some(message) = app_data.message_rx.recv() => {
-                    match message.sender_id {
-                        MessageSender::User(MessageSenderUser { user_id }) => if user_id == me.id { continue; },
-                        _ => ()
-                    }
-                    if message.chat_id >= 0 { continue; }
-                    if let Err(e) = handle_message(&message_to_send_tx, message, app_data.client_id).await {
-                        error!("Failed to handle message: {e:#?}");
+                    let failsafe = {
+                        // Skip messages from private chats
+                        if message.chat_id >= 0 {
+                            continue;
+                        }
+
+                        if let Some((user_id, is_scammer)) = is_scammer_account(app_data.db.clone(), &message)? {
+                            // Skip messages from me
+                            if user_id == me.id {
+                                continue;
+                            }
+
+                            if is_scammer {
+                                info!("Scammer detected: {user_id}");
+                                let sanction = fs::read_to_string("res/scam_account.txt")?;
+                                send_sanction(&message_to_send_tx, message, sanction, app_data.client_id).await?;
+                                continue;
+                            }
+                        }
+
+                        if is_scam_message(&message)? {
+                            info!("Scam message detected");
+                            let sanction = fs::read_to_string("res/message.txt")?;
+                            send_sanction(&message_to_send_tx, message, sanction, app_data.client_id).await?;
+                            continue;
+                        }
+
+                        Ok(())
+                    } as FetishResult<()>;
+
+                    if let Err(e) = failsafe {
+                        error!("Message handling error: {e:#?}");
                     }
                 },
                 _ = app_data.shutdown_rx.recv() => {
@@ -57,44 +87,64 @@ impl ApplicationState for MessageState {
     }
 }
 
-async fn handle_message(
-    message_to_send_tx: &tokio::sync::mpsc::UnboundedSender<SendMessageData>,
-    message: Message,
-    client_id: i32,
-) -> FetishResult<()> {
+fn is_scammer_account(
+    db: Arc<Mutex<Database>>,
+    message: &Message,
+) -> FetishResult<Option<(i64, bool)>> {
+    Ok(match message.sender_id {
+        MessageSender::User(MessageSenderUser { user_id }) => Some((
+            user_id,
+            db.lock().unwrap().load::<Scammer>(user_id)?.is_some(),
+        )),
+        _ => None,
+    })
+}
+
+fn is_scam_message(message: &Message) -> FetishResult<bool> {
     match &message.content {
         MessageContent::MessageText(message_text) => {
-            // Debug message.chat_id == -4162067427
             let text = message_text.text.text.clone();
-            info!("{}: {text}", message.chat_id);
+            info!(
+                "{}: {}{}",
+                message.chat_id,
+                &text[0..30],
+                if text.len() > 30 { "..." } else { "" }
+            );
             let text = unidecode(text.to_uppercase().as_str());
-            let sanction = fs::read_to_string("res/message.txt")?;
-            if serde_json::from_str::<Vec<String>>(
+            let is_scam = serde_json::from_str::<Vec<String>>(
                 fs::read_to_string("res/keywords.json")?.as_str(),
             )?
             .into_iter()
-            .any(|keyword| text.contains(&keyword))
-            {
-                message_to_send_tx
-                    .send((
-                        message,
-                        InputMessageContent::InputMessageText(InputMessageText {
-                            text: FormattedText {
-                                text: sanction.into(),
-                                entities: vec![],
-                            },
-                            disable_web_page_preview: true,
-                            clear_draft: false,
-                        }),
-                        client_id,
-                    ))
-                    .map_err(|_| FetishError::MessageHandle)?;
-            }
+            .any(|keyword| text.contains(&keyword));
+            Ok(is_scam)
         }
         _ => {
             trace!("{:#?}", message.content);
+            Ok(false)
         }
     }
+}
+
+async fn send_sanction(
+    message_to_send_tx: &tokio::sync::mpsc::UnboundedSender<SendMessageData>,
+    message: Message,
+    sanction: String,
+    client_id: i32,
+) -> FetishResult<()> {
+    message_to_send_tx
+        .send((
+            message,
+            InputMessageContent::InputMessageText(InputMessageText {
+                text: FormattedText {
+                    text: sanction,
+                    entities: vec![],
+                },
+                disable_web_page_preview: true,
+                clear_draft: false,
+            }),
+            client_id,
+        ))
+        .map_err(|_| FetishError::MessageHandle)?;
     Ok(())
 }
 

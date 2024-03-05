@@ -1,17 +1,31 @@
+use std::ops::Deref;
+
+use rusqlite::OptionalExtension;
 use serde::{Serialize, Serializer};
 use tdlib::types::User;
 
+use crate::error::FetishResult;
+
 use super::AutoRequestable;
 
-pub struct UserWrapper<'a>(&'a User);
+#[derive(Debug)]
+pub struct UserWrapper(User);
 
-impl<'a> From<&'a User> for UserWrapper<'a> {
-    fn from(user: &'a User) -> Self {
+impl Deref for UserWrapper {
+    type Target = User;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<User> for UserWrapper {
+    fn from(user: User) -> Self {
         Self(user)
     }
 }
 
-impl<'a> Serialize for UserWrapper<'a> {
+impl Serialize for UserWrapper {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -20,7 +34,7 @@ impl<'a> Serialize for UserWrapper<'a> {
     }
 }
 
-impl<'a> AutoRequestable for UserWrapper<'a> {
+impl AutoRequestable for UserWrapper {
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS USERS (
             user_id INTEGER PRIMARY KEY,
@@ -50,7 +64,53 @@ impl<'a> AutoRequestable for UserWrapper<'a> {
         .into()
     }
 
-    fn insert(&self, conn: &rusqlite::Connection) -> crate::error::FetishResult<()> {
+    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM USERS WHERE user_id = :user_id"#)?
+            .query_row(
+                rusqlite::named_params! {
+                    r#":user_id"#: id,
+                },
+                |row| {
+                    Ok(UserWrapper(User {
+                        id,
+                        first_name: row.get("first_name")?,
+                        last_name: row.get("last_name")?,
+                        usernames: serde_json::from_str(&row.get::<_, String>("usernames")?)
+                            .unwrap(),
+                        phone_number: row.get("phone_number")?,
+                        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
+                        profile_photo: serde_json::from_str(
+                            &row.get::<_, String>("profile_photo")?,
+                        )
+                        .unwrap(),
+                        emoji_status: serde_json::from_str(&row.get::<_, String>("emoji_status")?)
+                            .unwrap(),
+                        is_contact: row.get("is_contact")?,
+                        is_mutual_contact: row.get("is_mutual_contact")?,
+                        is_close_friend: row.get("is_close_friend")?,
+                        is_verified: row.get("is_verified")?,
+                        is_premium: row.get("is_premium")?,
+                        is_support: row.get("is_support")?,
+                        restriction_reason: row.get("restriction_reason")?,
+                        is_scam: row.get("is_scam")?,
+                        is_fake: row.get("is_fake")?,
+                        has_active_stories: row.get("has_active_stories")?,
+                        has_unread_active_stories: row.get("has_unread_active_stories")?,
+                        have_access: row.get("have_access")?,
+                        r#type: serde_json::from_str(&row.get::<_, String>("user_type")?).unwrap(),
+                        language_code: row.get("language_code")?,
+                        added_to_attachment_menu: row.get("added_to_attachment_menu")?,
+                    }))
+                },
+            )
+            .optional()?)
+    }
+
+    fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
+            return Ok(());
+        }
         conn.execute(
             r#"INSERT INTO USERS (
             user_id,

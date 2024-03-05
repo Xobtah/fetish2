@@ -1,17 +1,21 @@
+use rusqlite::OptionalExtension;
 use serde::{Serialize, Serializer};
 use tdlib::types::Message;
 
+use crate::error::FetishResult;
+
 use super::AutoRequestable;
 
-pub struct MessageWrapper<'a>(&'a Message);
+#[derive(Debug)]
+pub struct MessageWrapper(Message);
 
-impl<'a> From<&'a Message> for MessageWrapper<'a> {
-    fn from(message: &'a Message) -> Self {
+impl From<Message> for MessageWrapper {
+    fn from(message: Message) -> Self {
         Self(message)
     }
 }
 
-impl<'a> Serialize for MessageWrapper<'a> {
+impl Serialize for MessageWrapper {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -20,7 +24,7 @@ impl<'a> Serialize for MessageWrapper<'a> {
     }
 }
 
-impl<'a> AutoRequestable for MessageWrapper<'a> {
+impl AutoRequestable for MessageWrapper {
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS MESSAGES (
             message_id INTEGER PRIMARY KEY,
@@ -65,7 +69,84 @@ impl<'a> AutoRequestable for MessageWrapper<'a> {
         .into()
     }
 
-    fn insert(&self, conn: &rusqlite::Connection) -> crate::error::FetishResult<()> {
+    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM MESSAGES WHERE message_id = :message_id"#)?
+            .query_row(
+                rusqlite::named_params! {
+                    r#":message_id"#: id,
+                },
+                |row| {
+                    Ok(MessageWrapper(Message {
+                        id: id,
+                        sender_id: serde_json::from_str(&row.get::<_, String>("sender_id")?)
+                            .unwrap(),
+                        chat_id: row.get("chat_id")?,
+                        sending_state: serde_json::from_str(
+                            &row.get::<_, String>("sending_state")?,
+                        )
+                        .unwrap(),
+                        scheduling_state: serde_json::from_str(
+                            &row.get::<_, String>("scheduling_state")?,
+                        )
+                        .unwrap(),
+                        is_outgoing: row.get("is_outgoing")?,
+                        is_pinned: row.get("is_pinned")?,
+                        can_be_edited: row.get("can_be_edited")?,
+                        can_be_forwarded: row.get("can_be_forwarded")?,
+                        can_be_saved: row.get("can_be_saved")?,
+                        can_be_deleted_only_for_self: row.get("can_be_deleted_only_for_self")?,
+                        can_be_deleted_for_all_users: row.get("can_be_deleted_for_all_users")?,
+                        can_get_added_reactions: row.get("can_get_added_reactions")?,
+                        can_get_statistics: row.get("can_get_statistics")?,
+                        can_get_message_thread: row.get("can_get_message_thread")?,
+                        can_get_viewers: row.get("can_get_viewers")?,
+                        can_get_media_timestamp_links: row.get("can_get_media_timestamp_links")?,
+                        can_report_reactions: row.get("can_report_reactions")?,
+                        has_timestamped_media: row.get("has_timestamped_media")?,
+                        is_channel_post: row.get("is_channel_post")?,
+                        is_topic_message: row.get("is_topic_message")?,
+                        contains_unread_mention: row.get("contains_unread_mention")?,
+                        date: row.get("date")?,
+                        edit_date: row.get("edit_date")?,
+                        forward_info: serde_json::from_str(&row.get::<_, String>("forward_info")?)
+                            .unwrap(),
+                        interaction_info: serde_json::from_str(
+                            &row.get::<_, String>("interaction_info")?,
+                        )
+                        .unwrap(),
+                        unread_reactions: serde_json::from_str(
+                            &row.get::<_, String>("unread_reactions")?,
+                        )
+                        .unwrap(),
+                        reply_to: serde_json::from_str(&row.get::<_, String>("reply_to")?).unwrap(),
+                        message_thread_id: row.get("message_thread_id")?,
+                        self_destruct_type: serde_json::from_str(
+                            &row.get::<_, String>("self_destruct_type")?,
+                        )
+                        .unwrap(),
+                        self_destruct_in: row.get("self_destruct_in")?,
+                        auto_delete_in: row.get("auto_delete_in")?,
+                        via_bot_user_id: row.get("via_bot_user_id")?,
+                        author_signature: row.get("author_signature")?,
+                        media_album_id: row.get("media_album_id")?,
+                        restriction_reason: serde_json::from_str(
+                            &row.get::<_, String>("restriction_reason")?,
+                        )
+                        .unwrap(),
+                        content: serde_json::from_str(&row.get::<_, String>("content")?).unwrap(),
+                        reply_markup: serde_json::from_str(&row.get::<_, String>("reply_markup")?)
+                            .unwrap(),
+                    }))
+                },
+            )
+            .optional()?)
+    }
+
+    fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
+            return Ok(());
+        }
         conn.execute(
             r#"INSERT INTO MESSAGES (
             message_id,
