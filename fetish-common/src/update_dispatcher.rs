@@ -105,8 +105,7 @@ impl UpdateDispatcher {
                 Ok(self.auth_tx.send(update.authorization_state)?)
             }
             Update::NewMessage(message) => {
-                if let MessageContent::MessagePhoto(message_photo) = &message.message.content
-                {
+                if let MessageContent::MessagePhoto(message_photo) = &message.message.content {
                     if let Some(photo) = message_photo.photo.sizes.iter().fold(
                         None,
                         |acc: Option<&PhotoSize>, photo| {
@@ -126,6 +125,10 @@ impl UpdateDispatcher {
                 } else if let MessageContent::MessageVideo(message_video) = &message.message.content
                 {
                     download_file(message_video.video.video.id, client_id);
+                } else if let MessageContent::MessageAnimation(message_animation) =
+                    &message.message.content
+                {
+                    download_file(message_animation.animation.animation.id, client_id);
                 }
                 if let Err(e) = self
                     .db
