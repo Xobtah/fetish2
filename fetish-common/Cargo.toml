@@ -7,10 +7,12 @@ edition = "2021"
 
 [dependencies]
 async-trait = { workspace = true, features = [] }
+chrono = { workspace = true, features = [] }
 dialoguer = { workspace = true, features = [] }
 futures = { workspace = true, features = [] }
 log = { workspace = true, features = [] }
 rand = { workspace = true, features = [] }
+regex = { workspace = true, features = [] }
 rusqlite = { workspace = true, features = [] }
 serde = { workspace = true, features = [] }
 serde_json = { workspace = true, features = [] }

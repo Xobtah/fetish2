@@ -54,6 +54,15 @@ impl PartialEq for Location {
     }
 }
 
+impl Eq for Location {}
+
+impl std::hash::Hash for Location {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.round(6).0.to_bits().hash(state);
+        self.round(6).1.to_bits().hash(state);
+    }
+}
+
 impl Location {
     pub fn new(lat: f64, lon: f64) -> Location {
         Location(lat, lon)

@@ -20,7 +20,7 @@ pub struct ApplicationData {
     pub auth_rx: mpsc::UnboundedReceiver<AuthorizationState>,
     pub message_rx: mpsc::UnboundedReceiver<Message>,
     pub shutdown_rx: tokio::sync::broadcast::Receiver<()>,
-    pub db: Arc<Mutex<Database>>,
+    pub conn: Arc<Mutex<Database>>,
 }
 
 unsafe impl Send for ApplicationData {}
@@ -71,7 +71,7 @@ impl Application {
                 auth_rx,
                 message_rx,
                 shutdown_rx,
-                db
+                conn: db,
             };
 
             debug!("Running state machine");

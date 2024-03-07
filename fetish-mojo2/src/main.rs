@@ -139,7 +139,7 @@ WHERE first_name LIKE :first_name
                         KeyCode::Char('e') => {
                             self.input_mode = InputMode::Query;
                         }
-                        KeyCode::Char('q') | KeyCode::Esc => {
+                        KeyCode::Char('q') => {
                             return Ok(());
                         }
                         KeyCode::Down if self.users.len() > 0 => {

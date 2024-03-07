@@ -35,6 +35,8 @@ impl Serialize for SupergroupWrapper {
 }
 
 impl AutoRequestable for SupergroupWrapper {
+    type UniqueIdentifier = i64;
+
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS SUPERGROUPS (
             id INTEGER PRIMARY KEY,
@@ -61,46 +63,32 @@ impl AutoRequestable for SupergroupWrapper {
         .into()
     }
 
-    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+    fn get_id(&self) -> Self::UniqueIdentifier {
+        self.0.id
+    }
+
+    fn select_by_id(id: Self::UniqueIdentifier, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
         Ok(conn
             .prepare(r#"SELECT * FROM SUPERGROUPS WHERE id = :id"#)?
             .query_row(
                 rusqlite::named_params! {
                     r#":id"#: id,
                 },
-                |row| {
-                    Ok(SupergroupWrapper(Supergroup {
-                        id,
-                        usernames: serde_json::from_str(&row.get::<_, String>("usernames")?)
-                            .unwrap(),
-                        date: row.get("date")?,
-                        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
-                        member_count: row.get("member_count")?,
-                        has_linked_chat: row.get("has_linked_chat")?,
-                        has_location: row.get("has_location")?,
-                        sign_messages: row.get("sign_messages")?,
-                        join_to_send_messages: row.get("join_to_send_messages")?,
-                        join_by_request: row.get("join_by_request")?,
-                        is_slow_mode_enabled: row.get("is_slow_mode_enabled")?,
-                        is_channel: row.get("is_channel")?,
-                        is_broadcast_group: row.get("is_broadcast_group")?,
-                        is_forum: row.get("is_forum")?,
-                        is_verified: row.get("is_verified")?,
-                        restriction_reason: row.get("restriction_reason")?,
-                        is_scam: row.get("is_scam")?,
-                        is_fake: row.get("is_fake")?,
-                        has_active_stories: row.get("has_active_stories")?,
-                        has_unread_active_stories: row.get("has_unread_active_stories")?,
-                    }))
-                },
+                from_row,
             )
             .optional()?)
     }
 
+    fn select_all(conn: &rusqlite::Connection) -> FetishResult<Vec<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM SUPERGROUPS"#)?
+            .query_map(rusqlite::named_params! {}, from_row)?
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<Self>>())
+    }
+
     fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
-        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
-            return Ok(());
-        }
         conn.execute(
             r#"INSERT INTO SUPERGROUPS (
             id,
@@ -147,28 +135,105 @@ impl AutoRequestable for SupergroupWrapper {
         )"#
             .into(),
             rusqlite::named_params! {
-                r#":id"#: &self.0.id,
-                r#":usernames"#: &serde_json::to_string(&self.0.usernames).unwrap(),
-                r#":date"#: &self.0.date,
-                r#":status"#: &serde_json::to_string(&self.0.status).unwrap(),
-                r#":member_count"#: &self.0.member_count,
-                r#":has_linked_chat"#: &self.0.has_linked_chat,
-                r#":has_location"#: &self.0.has_location,
-                r#":sign_messages"#: &self.0.sign_messages,
-                r#":join_to_send_messages"#: &self.0.join_to_send_messages,
-                r#":join_by_request"#: &self.0.join_by_request,
-                r#":is_slow_mode_enabled"#: &self.0.is_slow_mode_enabled,
-                r#":is_channel"#: &self.0.is_channel,
-                r#":is_broadcast_group"#: &self.0.is_broadcast_group,
-                r#":is_forum"#: &self.0.is_forum,
-                r#":is_verified"#: &self.0.is_verified,
-                r#":restriction_reason"#: &self.0.restriction_reason,
-                r#":is_scam"#: &self.0.is_scam,
-                r#":is_fake"#: &self.0.is_fake,
-                r#":has_active_stories"#: &self.0.has_active_stories,
-                r#":has_unread_active_stories"#: &self.0.has_unread_active_stories,
+                ":id": &self.0.id,
+                ":usernames": &serde_json::to_string(&self.0.usernames).unwrap(),
+                ":date": &self.0.date,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":member_count": &self.0.member_count,
+                ":has_linked_chat": &self.0.has_linked_chat,
+                ":has_location": &self.0.has_location,
+                ":sign_messages": &self.0.sign_messages,
+                ":join_to_send_messages": &self.0.join_to_send_messages,
+                ":join_by_request": &self.0.join_by_request,
+                ":is_slow_mode_enabled": &self.0.is_slow_mode_enabled,
+                ":is_channel": &self.0.is_channel,
+                ":is_broadcast_group": &self.0.is_broadcast_group,
+                ":is_forum": &self.0.is_forum,
+                ":is_verified": &self.0.is_verified,
+                ":restriction_reason": &self.0.restriction_reason,
+                ":is_scam": &self.0.is_scam,
+                ":is_fake": &self.0.is_fake,
+                ":has_active_stories": &self.0.has_active_stories,
+                ":has_unread_active_stories": &self.0.has_unread_active_stories,
             },
         )?;
         Ok(())
     }
+
+    fn update(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        conn.execute(
+            r#"UPDATE SUPERGROUPS
+            SET
+                usernames = :usernames,
+                date = :date,
+                status = :status,
+                member_count = :member_count,
+                has_linked_chat = :has_linked_chat,
+                has_location = :has_location,
+                sign_messages = :sign_messages,
+                join_to_send_messages = :join_to_send_messages,
+                join_by_request = :join_by_request,
+                is_slow_mode_enabled = :is_slow_mode_enabled,
+                is_channel = :is_channel,
+                is_broadcast_group = :is_broadcast_group,
+                is_forum = :is_forum,
+                is_verified = :is_verified,
+                restriction_reason = :restriction_reason,
+                is_scam = :is_scam,
+                is_fake = :is_fake,
+                has_active_stories = :has_active_stories,
+                has_unread_active_stories = :has_unread_active_stories
+            WHERE
+                id = :id"#
+                .into(),
+            rusqlite::named_params! {
+                ":id": &self.0.id,
+                ":usernames": &serde_json::to_string(&self.0.usernames).unwrap(),
+                ":date": &self.0.date,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":member_count": &self.0.member_count,
+                ":has_linked_chat": &self.0.has_linked_chat,
+                ":has_location": &self.0.has_location,
+                ":sign_messages": &self.0.sign_messages,
+                ":join_to_send_messages": &self.0.join_to_send_messages,
+                ":join_by_request": &self.0.join_by_request,
+                ":is_slow_mode_enabled": &self.0.is_slow_mode_enabled,
+                ":is_channel": &self.0.is_channel,
+                ":is_broadcast_group": &self.0.is_broadcast_group,
+                ":is_forum": &self.0.is_forum,
+                ":is_verified": &self.0.is_verified,
+                ":restriction_reason": &self.0.restriction_reason,
+                ":is_scam": &self.0.is_scam,
+                ":is_fake": &self.0.is_fake,
+                ":has_active_stories": &self.0.has_active_stories,
+                ":has_unread_active_stories": &self.0.has_unread_active_stories,
+            },
+        )?;
+        Ok(())
+    }
+}
+
+fn from_row(row: &rusqlite::Row) -> Result<SupergroupWrapper, rusqlite::Error> {
+    Ok(SupergroupWrapper(Supergroup {
+        id: row.get("id")?,
+        usernames: serde_json::from_str(&row.get::<_, String>("usernames")?).unwrap(),
+        date: row.get("date")?,
+        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
+        member_count: row.get("member_count")?,
+        has_linked_chat: row.get("has_linked_chat")?,
+        has_location: row.get("has_location")?,
+        sign_messages: row.get("sign_messages")?,
+        join_to_send_messages: row.get("join_to_send_messages")?,
+        join_by_request: row.get("join_by_request")?,
+        is_slow_mode_enabled: row.get("is_slow_mode_enabled")?,
+        is_channel: row.get("is_channel")?,
+        is_broadcast_group: row.get("is_broadcast_group")?,
+        is_forum: row.get("is_forum")?,
+        is_verified: row.get("is_verified")?,
+        restriction_reason: row.get("restriction_reason")?,
+        is_scam: row.get("is_scam")?,
+        is_fake: row.get("is_fake")?,
+        has_active_stories: row.get("has_active_stories")?,
+        has_unread_active_stories: row.get("has_unread_active_stories")?,
+    }))
 }

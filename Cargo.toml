@@ -26,3 +26,5 @@ unidecode = { version = "0.3.0", default-features = false }
 
 # TUI
 # Configurable states (join chat strategy, who and where to reply...)
+# Enlever tous les unwraps
+# Flag scammer based on name

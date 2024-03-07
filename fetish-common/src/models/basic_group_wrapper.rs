@@ -35,6 +35,8 @@ impl Serialize for BasicGroupWrapper {
 }
 
 impl AutoRequestable for BasicGroupWrapper {
+    type UniqueIdentifier = i64;
+
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS BASIC_GROUPS (
             id INTEGER PRIMARY KEY,
@@ -46,30 +48,35 @@ impl AutoRequestable for BasicGroupWrapper {
         .into()
     }
 
-    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+    fn get_id(&self) -> Self::UniqueIdentifier {
+        self.0.id
+    }
+
+    fn select_by_id(
+        id: Self::UniqueIdentifier,
+        conn: &rusqlite::Connection,
+    ) -> FetishResult<Option<Self>> {
         Ok(conn
             .prepare(r#"SELECT * FROM BASIC_GROUPS WHERE id = :id"#)?
             .query_row(
                 rusqlite::named_params! {
                     r#":id"#: id,
                 },
-                |row| {
-                    Ok(BasicGroupWrapper(BasicGroup {
-                        id,
-                        member_count: row.get("member_count")?,
-                        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
-                        is_active: row.get("is_active")?,
-                        upgraded_to_supergroup_id: row.get("upgraded_to_supergroup_id")?,
-                    }))
-                },
+                from_row,
             )
             .optional()?)
     }
 
+    fn select_all(conn: &rusqlite::Connection) -> FetishResult<Vec<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM BASIC_GROUPS"#)?
+            .query_map(rusqlite::named_params! {}, from_row)?
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<Self>>())
+    }
+
     fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
-        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
-            return Ok(());
-        }
         conn.execute(
             r#"INSERT INTO BASIC_GROUPS (
             id,
@@ -86,13 +93,45 @@ impl AutoRequestable for BasicGroupWrapper {
         )"#
             .into(),
             rusqlite::named_params! {
-                r#":id"#: &self.0.id,
-                r#":member_count"#: &self.0.member_count,
-                r#":status"#: &serde_json::to_string(&self.0.status).unwrap(),
-                r#":is_active"#: &self.0.is_active,
-                r#":upgraded_to_supergroup_id"#: &self.0.upgraded_to_supergroup_id,
+                ":id": &self.0.id,
+                ":member_count": &self.0.member_count,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":is_active": &self.0.is_active,
+                ":upgraded_to_supergroup_id": &self.0.upgraded_to_supergroup_id,
             },
         )?;
         Ok(())
     }
+
+    fn update(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        conn.execute(
+            r#"UPDATE BASIC_GROUPS
+            SET
+                member_count = :member_count,
+                status = :status,
+                is_active = :is_active,
+                upgraded_to_supergroup_id = :upgraded_to_supergroup_id
+            WHERE
+                id = :id"#
+                .into(),
+            rusqlite::named_params! {
+                ":id": &self.0.id,
+                ":member_count": &self.0.member_count,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":is_active": &self.0.is_active,
+                ":upgraded_to_supergroup_id": &self.0.upgraded_to_supergroup_id,
+            },
+        )?;
+        Ok(())
+    }
+}
+
+fn from_row(row: &rusqlite::Row) -> Result<BasicGroupWrapper, rusqlite::Error> {
+    Ok(BasicGroupWrapper(BasicGroup {
+        id: row.get("id")?,
+        member_count: row.get("member_count")?,
+        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
+        is_active: row.get("is_active")?,
+        upgraded_to_supergroup_id: row.get("upgraded_to_supergroup_id")?,
+    }))
 }

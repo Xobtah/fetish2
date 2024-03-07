@@ -35,6 +35,8 @@ impl Serialize for UserWrapper {
 }
 
 impl AutoRequestable for UserWrapper {
+    type UniqueIdentifier = i64;
+
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS USERS (
             user_id INTEGER PRIMARY KEY,
@@ -64,53 +66,35 @@ impl AutoRequestable for UserWrapper {
         .into()
     }
 
-    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+    fn get_id(&self) -> Self::UniqueIdentifier {
+        self.0.id
+    }
+
+    fn select_by_id(
+        id: Self::UniqueIdentifier,
+        conn: &rusqlite::Connection,
+    ) -> FetishResult<Option<Self>> {
         Ok(conn
             .prepare(r#"SELECT * FROM USERS WHERE user_id = :user_id"#)?
             .query_row(
                 rusqlite::named_params! {
                     r#":user_id"#: id,
                 },
-                |row| {
-                    Ok(UserWrapper(User {
-                        id,
-                        first_name: row.get("first_name")?,
-                        last_name: row.get("last_name")?,
-                        usernames: serde_json::from_str(&row.get::<_, String>("usernames")?)
-                            .unwrap(),
-                        phone_number: row.get("phone_number")?,
-                        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
-                        profile_photo: serde_json::from_str(
-                            &row.get::<_, String>("profile_photo")?,
-                        )
-                        .unwrap(),
-                        emoji_status: serde_json::from_str(&row.get::<_, String>("emoji_status")?)
-                            .unwrap(),
-                        is_contact: row.get("is_contact")?,
-                        is_mutual_contact: row.get("is_mutual_contact")?,
-                        is_close_friend: row.get("is_close_friend")?,
-                        is_verified: row.get("is_verified")?,
-                        is_premium: row.get("is_premium")?,
-                        is_support: row.get("is_support")?,
-                        restriction_reason: row.get("restriction_reason")?,
-                        is_scam: row.get("is_scam")?,
-                        is_fake: row.get("is_fake")?,
-                        has_active_stories: row.get("has_active_stories")?,
-                        has_unread_active_stories: row.get("has_unread_active_stories")?,
-                        have_access: row.get("have_access")?,
-                        r#type: serde_json::from_str(&row.get::<_, String>("user_type")?).unwrap(),
-                        language_code: row.get("language_code")?,
-                        added_to_attachment_menu: row.get("added_to_attachment_menu")?,
-                    }))
-                },
+                from_row,
             )
             .optional()?)
     }
 
+    fn select_all(conn: &rusqlite::Connection) -> FetishResult<Vec<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM USERS"#)?
+            .query_map(rusqlite::named_params! {}, from_row)?
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<Self>>())
+    }
+
     fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
-        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
-            return Ok(());
-        }
         conn.execute(
             r#"INSERT INTO USERS (
             user_id,
@@ -163,31 +147,117 @@ impl AutoRequestable for UserWrapper {
         )"#
             .into(),
             rusqlite::named_params! {
-                r#":user_id"#: &self.0.id,
-                r#":first_name"#: &self.0.first_name,
-                r#":last_name"#: &self.0.last_name,
-                r#":usernames"#: &serde_json::to_string(&self.0.usernames).unwrap(),
-                r#":phone_number"#: &self.0.phone_number,
-                r#":status"#: &serde_json::to_string(&self.0.status).unwrap(),
-                r#":profile_photo"#: &serde_json::to_string(&self.0.profile_photo).unwrap(),
-                r#":emoji_status"#: &serde_json::to_string(&self.0.emoji_status).unwrap(),
-                r#":is_contact"#: &self.0.is_contact,
-                r#":is_mutual_contact"#: &self.0.is_mutual_contact,
-                r#":is_close_friend"#: &self.0.is_close_friend,
-                r#":is_verified"#: &self.0.is_verified,
-                r#":is_premium"#: &self.0.is_premium,
-                r#":is_support"#: &self.0.is_support,
-                r#":restriction_reason"#: &self.0.restriction_reason,
-                r#":is_scam"#: &self.0.is_scam,
-                r#":is_fake"#: &self.0.is_fake,
-                r#":has_active_stories"#: &self.0.has_active_stories,
-                r#":has_unread_active_stories"#: &self.0.has_unread_active_stories,
-                r#":have_access"#: &self.0.have_access,
-                r#":user_type"#: &serde_json::to_string(&self.0.r#type).unwrap(),
-                r#":language_code"#: &self.0.language_code,
-                r#":added_to_attachment_menu"#: &self.0.added_to_attachment_menu,
+                ":user_id": &self.0.id,
+                ":first_name": &self.0.first_name,
+                ":last_name": &self.0.last_name,
+                ":usernames": &serde_json::to_string(&self.0.usernames).unwrap(),
+                ":phone_number": &self.0.phone_number,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":profile_photo": &serde_json::to_string(&self.0.profile_photo).unwrap(),
+                ":emoji_status": &serde_json::to_string(&self.0.emoji_status).unwrap(),
+                ":is_contact": &self.0.is_contact,
+                ":is_mutual_contact": &self.0.is_mutual_contact,
+                ":is_close_friend": &self.0.is_close_friend,
+                ":is_verified": &self.0.is_verified,
+                ":is_premium": &self.0.is_premium,
+                ":is_support": &self.0.is_support,
+                ":restriction_reason": &self.0.restriction_reason,
+                ":is_scam": &self.0.is_scam,
+                ":is_fake": &self.0.is_fake,
+                ":has_active_stories": &self.0.has_active_stories,
+                ":has_unread_active_stories": &self.0.has_unread_active_stories,
+                ":have_access": &self.0.have_access,
+                ":user_type": &serde_json::to_string(&self.0.r#type).unwrap(),
+                ":language_code": &self.0.language_code,
+                ":added_to_attachment_menu": &self.0.added_to_attachment_menu,
             },
         )?;
         Ok(())
     }
+
+    fn update(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        conn.execute(
+            r#"UPDATE USERS
+            SET
+                first_name = :first_name,
+                last_name = :last_name,
+                usernames = :usernames,
+                phone_number = :phone_number,
+                status = :status,
+                profile_photo = :profile_photo,
+                emoji_status = :emoji_status,
+                is_contact = :is_contact,
+                is_mutual_contact = :is_mutual_contact,
+                is_close_friend = :is_close_friend,
+                is_verified = :is_verified,
+                is_premium = :is_premium,
+                is_support = :is_support,
+                restriction_reason = :restriction_reason,
+                is_scam = :is_scam,
+                is_fake = :is_fake,
+                has_active_stories = :has_active_stories,
+                has_unread_active_stories = :has_unread_active_stories,
+                have_access = :have_access,
+                user_type = :user_type,
+                language_code = :language_code,
+                added_to_attachment_menu = :added_to_attachment_menu
+            WHERE
+                user_id = :user_id"#
+                .into(),
+            rusqlite::named_params! {
+                ":user_id": &self.0.id,
+                ":first_name": &self.0.first_name,
+                ":last_name": &self.0.last_name,
+                ":usernames": &serde_json::to_string(&self.0.usernames).unwrap(),
+                ":phone_number": &self.0.phone_number,
+                ":status": &serde_json::to_string(&self.0.status).unwrap(),
+                ":profile_photo": &serde_json::to_string(&self.0.profile_photo).unwrap(),
+                ":emoji_status": &serde_json::to_string(&self.0.emoji_status).unwrap(),
+                ":is_contact": &self.0.is_contact,
+                ":is_mutual_contact": &self.0.is_mutual_contact,
+                ":is_close_friend": &self.0.is_close_friend,
+                ":is_verified": &self.0.is_verified,
+                ":is_premium": &self.0.is_premium,
+                ":is_support": &self.0.is_support,
+                ":restriction_reason": &self.0.restriction_reason,
+                ":is_scam": &self.0.is_scam,
+                ":is_fake": &self.0.is_fake,
+                ":has_active_stories": &self.0.has_active_stories,
+                ":has_unread_active_stories": &self.0.has_unread_active_stories,
+                ":have_access": &self.0.have_access,
+                ":user_type": &serde_json::to_string(&self.0.r#type).unwrap(),
+                ":language_code": &self.0.language_code,
+                ":added_to_attachment_menu": &self.0.added_to_attachment_menu,
+            },
+        )?;
+        Ok(())
+    }
+}
+
+fn from_row(row: &rusqlite::Row) -> Result<UserWrapper, rusqlite::Error> {
+    Ok(UserWrapper(User {
+        id: row.get("user_id")?,
+        first_name: row.get("first_name")?,
+        last_name: row.get("last_name")?,
+        usernames: serde_json::from_str(&row.get::<_, String>("usernames")?).unwrap(),
+        phone_number: row.get("phone_number")?,
+        status: serde_json::from_str(&row.get::<_, String>("status")?).unwrap(),
+        profile_photo: serde_json::from_str(&row.get::<_, String>("profile_photo")?).unwrap(),
+        emoji_status: serde_json::from_str(&row.get::<_, String>("emoji_status")?).unwrap(),
+        is_contact: row.get("is_contact")?,
+        is_mutual_contact: row.get("is_mutual_contact")?,
+        is_close_friend: row.get("is_close_friend")?,
+        is_verified: row.get("is_verified")?,
+        is_premium: row.get("is_premium")?,
+        is_support: row.get("is_support")?,
+        restriction_reason: row.get("restriction_reason")?,
+        is_scam: row.get("is_scam")?,
+        is_fake: row.get("is_fake")?,
+        has_active_stories: row.get("has_active_stories")?,
+        has_unread_active_stories: row.get("has_unread_active_stories")?,
+        have_access: row.get("have_access")?,
+        r#type: serde_json::from_str(&row.get::<_, String>("user_type")?).unwrap(),
+        language_code: row.get("language_code")?,
+        added_to_attachment_menu: row.get("added_to_attachment_menu")?,
+    }))
 }

@@ -25,6 +25,8 @@ impl Serialize for MessageWrapper {
 }
 
 impl AutoRequestable for MessageWrapper {
+    type UniqueIdentifier = i64;
+
     fn create_table_request() -> String {
         r#"CREATE TABLE IF NOT EXISTS MESSAGES (
             message_id INTEGER PRIMARY KEY,
@@ -69,84 +71,32 @@ impl AutoRequestable for MessageWrapper {
         .into()
     }
 
-    fn select_by_id(id: i64, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
+    fn get_id(&self) -> Self::UniqueIdentifier {
+        self.0.id
+    }
+
+    fn select_by_id(id: Self::UniqueIdentifier, conn: &rusqlite::Connection) -> FetishResult<Option<Self>> {
         Ok(conn
             .prepare(r#"SELECT * FROM MESSAGES WHERE message_id = :message_id"#)?
             .query_row(
                 rusqlite::named_params! {
                     r#":message_id"#: id,
                 },
-                |row| {
-                    Ok(MessageWrapper(Message {
-                        id: id,
-                        sender_id: serde_json::from_str(&row.get::<_, String>("sender_id")?)
-                            .unwrap(),
-                        chat_id: row.get("chat_id")?,
-                        sending_state: serde_json::from_str(
-                            &row.get::<_, String>("sending_state")?,
-                        )
-                        .unwrap(),
-                        scheduling_state: serde_json::from_str(
-                            &row.get::<_, String>("scheduling_state")?,
-                        )
-                        .unwrap(),
-                        is_outgoing: row.get("is_outgoing")?,
-                        is_pinned: row.get("is_pinned")?,
-                        can_be_edited: row.get("can_be_edited")?,
-                        can_be_forwarded: row.get("can_be_forwarded")?,
-                        can_be_saved: row.get("can_be_saved")?,
-                        can_be_deleted_only_for_self: row.get("can_be_deleted_only_for_self")?,
-                        can_be_deleted_for_all_users: row.get("can_be_deleted_for_all_users")?,
-                        can_get_added_reactions: row.get("can_get_added_reactions")?,
-                        can_get_statistics: row.get("can_get_statistics")?,
-                        can_get_message_thread: row.get("can_get_message_thread")?,
-                        can_get_viewers: row.get("can_get_viewers")?,
-                        can_get_media_timestamp_links: row.get("can_get_media_timestamp_links")?,
-                        can_report_reactions: row.get("can_report_reactions")?,
-                        has_timestamped_media: row.get("has_timestamped_media")?,
-                        is_channel_post: row.get("is_channel_post")?,
-                        is_topic_message: row.get("is_topic_message")?,
-                        contains_unread_mention: row.get("contains_unread_mention")?,
-                        date: row.get("date")?,
-                        edit_date: row.get("edit_date")?,
-                        forward_info: serde_json::from_str(&row.get::<_, String>("forward_info")?)
-                            .unwrap(),
-                        interaction_info: serde_json::from_str(
-                            &row.get::<_, String>("interaction_info")?,
-                        )
-                        .unwrap(),
-                        unread_reactions: serde_json::from_str(
-                            &row.get::<_, String>("unread_reactions")?,
-                        )
-                        .unwrap(),
-                        reply_to: serde_json::from_str(&row.get::<_, String>("reply_to")?).unwrap(),
-                        message_thread_id: row.get("message_thread_id")?,
-                        self_destruct_type: serde_json::from_str(
-                            &row.get::<_, String>("self_destruct_type")?,
-                        )
-                        .unwrap(),
-                        self_destruct_in: row.get("self_destruct_in")?,
-                        auto_delete_in: row.get("auto_delete_in")?,
-                        via_bot_user_id: row.get("via_bot_user_id")?,
-                        author_signature: row.get("author_signature")?,
-                        media_album_id: row.get("media_album_id")?,
-                        restriction_reason: serde_json::from_str(
-                            &row.get::<_, String>("restriction_reason")?,
-                        )
-                        .unwrap(),
-                        content: serde_json::from_str(&row.get::<_, String>("content")?).unwrap(),
-                        reply_markup: serde_json::from_str(&row.get::<_, String>("reply_markup")?)
-                            .unwrap(),
-                    }))
-                },
+                from_row,
             )
             .optional()?)
     }
 
+    fn select_all(conn: &rusqlite::Connection) -> FetishResult<Vec<Self>> {
+        Ok(conn
+            .prepare(r#"SELECT * FROM MESSAGES"#)?
+            .query_map(rusqlite::named_params! {}, from_row)?
+            .into_iter()
+            .filter_map(Result::ok)
+            .collect::<Vec<Self>>())
+    }
+
     fn insert(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
-        if let Some(_) = Self::select_by_id(self.0.id, conn)? {
-            return Ok(());
-        }
         conn.execute(
             r#"INSERT INTO MESSAGES (
             message_id,
@@ -229,46 +179,179 @@ impl AutoRequestable for MessageWrapper {
         )"#
             .into(),
             rusqlite::named_params! {
-                r#":message_id"#: &self.0.id,
-                r#":sender_id"#: &serde_json::to_string(&self.0.sender_id).unwrap(),
-                r#":chat_id"#: &self.0.chat_id,
-                r#":sending_state"#: &serde_json::to_string(&self.0.sending_state).unwrap(),
-                r#":scheduling_state"#: &serde_json::to_string(&self.0.scheduling_state).unwrap(),
-                r#":is_outgoing"#: &self.0.is_outgoing,
-                r#":is_pinned"#: &self.0.is_pinned,
-                r#":can_be_edited"#: &self.0.can_be_edited,
-                r#":can_be_forwarded"#: &self.0.can_be_forwarded,
-                r#":can_be_saved"#: &self.0.can_be_saved,
-                r#":can_be_deleted_only_for_self"#: &self.0.can_be_deleted_only_for_self,
-                r#":can_be_deleted_for_all_users"#: &self.0.can_be_deleted_for_all_users,
-                r#":can_get_added_reactions"#: &self.0.can_get_added_reactions,
-                r#":can_get_statistics"#: &self.0.can_get_statistics,
-                r#":can_get_message_thread"#: &self.0.can_get_message_thread,
-                r#":can_get_viewers"#: &self.0.can_get_viewers,
-                r#":can_get_media_timestamp_links"#: &self.0.can_get_media_timestamp_links,
-                r#":can_report_reactions"#: &self.0.can_report_reactions,
-                r#":has_timestamped_media"#: &self.0.has_timestamped_media,
-                r#":is_channel_post"#: &self.0.is_channel_post,
-                r#":is_topic_message"#: &self.0.is_topic_message,
-                r#":contains_unread_mention"#: &self.0.contains_unread_mention,
-                r#":date"#: &self.0.date,
-                r#":edit_date"#: &self.0.edit_date,
-                r#":forward_info"#: &serde_json::to_string(&self.0.forward_info).unwrap(),
-                r#":interaction_info"#: &serde_json::to_string(&self.0.interaction_info).unwrap(),
-                r#":unread_reactions"#: &serde_json::to_string(&self.0.unread_reactions).unwrap(),
-                r#":reply_to"#: &serde_json::to_string(&self.0.reply_to).unwrap(),
-                r#":message_thread_id"#: &self.0.message_thread_id,
-                r#":self_destruct_type"#: &serde_json::to_string(&self.0.self_destruct_type).unwrap(),
-                r#":self_destruct_in"#: &self.0.self_destruct_in,
-                r#":auto_delete_in"#: &self.0.auto_delete_in,
-                r#":via_bot_user_id"#: &self.0.via_bot_user_id,
-                r#":author_signature"#: &self.0.author_signature,
-                r#":media_album_id"#: &self.0.media_album_id,
-                r#":restriction_reason"#: &serde_json::to_string(&self.0.restriction_reason).unwrap(),
-                r#":content"#: &serde_json::to_string(&self.0.content).unwrap(),
-                r#":reply_markup"#: &serde_json::to_string(&self.0.reply_markup).unwrap(),
+                ":message_id": &self.0.id,
+                ":sender_id": &serde_json::to_string(&self.0.sender_id).unwrap(),
+                ":chat_id": &self.0.chat_id,
+                ":sending_state": &serde_json::to_string(&self.0.sending_state).unwrap(),
+                ":scheduling_state": &serde_json::to_string(&self.0.scheduling_state).unwrap(),
+                ":is_outgoing": &self.0.is_outgoing,
+                ":is_pinned": &self.0.is_pinned,
+                ":can_be_edited": &self.0.can_be_edited,
+                ":can_be_forwarded": &self.0.can_be_forwarded,
+                ":can_be_saved": &self.0.can_be_saved,
+                ":can_be_deleted_only_for_self": &self.0.can_be_deleted_only_for_self,
+                ":can_be_deleted_for_all_users": &self.0.can_be_deleted_for_all_users,
+                ":can_get_added_reactions": &self.0.can_get_added_reactions,
+                ":can_get_statistics": &self.0.can_get_statistics,
+                ":can_get_message_thread": &self.0.can_get_message_thread,
+                ":can_get_viewers": &self.0.can_get_viewers,
+                ":can_get_media_timestamp_links": &self.0.can_get_media_timestamp_links,
+                ":can_report_reactions": &self.0.can_report_reactions,
+                ":has_timestamped_media": &self.0.has_timestamped_media,
+                ":is_channel_post": &self.0.is_channel_post,
+                ":is_topic_message": &self.0.is_topic_message,
+                ":contains_unread_mention": &self.0.contains_unread_mention,
+                ":date": &self.0.date,
+                ":edit_date": &self.0.edit_date,
+                ":forward_info": &serde_json::to_string(&self.0.forward_info).unwrap(),
+                ":interaction_info": &serde_json::to_string(&self.0.interaction_info).unwrap(),
+                ":unread_reactions": &serde_json::to_string(&self.0.unread_reactions).unwrap(),
+                ":reply_to": &serde_json::to_string(&self.0.reply_to).unwrap(),
+                ":message_thread_id": &self.0.message_thread_id,
+                ":self_destruct_type": &serde_json::to_string(&self.0.self_destruct_type).unwrap(),
+                ":self_destruct_in": &self.0.self_destruct_in,
+                ":auto_delete_in": &self.0.auto_delete_in,
+                ":via_bot_user_id": &self.0.via_bot_user_id,
+                ":author_signature": &self.0.author_signature,
+                ":media_album_id": &self.0.media_album_id,
+                ":restriction_reason": &serde_json::to_string(&self.0.restriction_reason).unwrap(),
+                ":content": &serde_json::to_string(&self.0.content).unwrap(),
+                ":reply_markup": &serde_json::to_string(&self.0.reply_markup).unwrap(),
             },
         )?;
         Ok(())
     }
+
+    fn update(&self, conn: &rusqlite::Connection) -> FetishResult<()> {
+        conn.execute(
+            r#"UPDATE MESSAGES
+            SET
+                sender_id = :sender_id,
+                chat_id = :chat_id,
+                sending_state = :sending_state,
+                scheduling_state = :scheduling_state,
+                is_outgoing = :is_outgoing,
+                is_pinned = :is_pinned,
+                can_be_edited = :can_be_edited,
+                can_be_forwarded = :can_be_forwarded,
+                can_be_saved = :can_be_saved,
+                can_be_deleted_only_for_self = :can_be_deleted_only_for_self,
+                can_be_deleted_for_all_users = :can_be_deleted_for_all_users,
+                can_get_added_reactions = :can_get_added_reactions,
+                can_get_statistics = :can_get_statistics,
+                can_get_message_thread = :can_get_message_thread,
+                can_get_viewers = :can_get_viewers,
+                can_get_media_timestamp_links = :can_get_media_timestamp_links,
+                can_report_reactions = :can_report_reactions,
+                has_timestamped_media = :has_timestamped_media,
+                is_channel_post = :is_channel_post,
+                is_topic_message = :is_topic_message,
+                contains_unread_mention = :contains_unread_mention,
+                date = :date,
+                edit_date = :edit_date,
+                forward_info = :forward_info,
+                interaction_info = :interaction_info,
+                unread_reactions = :unread_reactions,
+                reply_to = :reply_to,
+                message_thread_id = :message_thread_id,
+                self_destruct_type = :self_destruct_type,
+                self_destruct_in = :self_destruct_in,
+                auto_delete_in = :auto_delete_in,
+                via_bot_user_id = :via_bot_user_id,
+                author_signature = :author_signature,
+                media_album_id = :media_album_id,
+                restriction_reason = :restriction_reason,
+                content = :content,
+                reply_markup = :reply_markup
+            WHERE
+                message_id = :message_id"#
+                .into(),
+            rusqlite::named_params! {
+                ":message_id": &self.0.id,
+                ":sender_id": &serde_json::to_string(&self.0.sender_id).unwrap(),
+                ":chat_id": &self.0.chat_id,
+                ":sending_state": &serde_json::to_string(&self.0.sending_state).unwrap(),
+                ":scheduling_state": &serde_json::to_string(&self.0.scheduling_state).unwrap(),
+                ":is_outgoing": &self.0.is_outgoing,
+                ":is_pinned": &self.0.is_pinned,
+                ":can_be_edited": &self.0.can_be_edited,
+                ":can_be_forwarded": &self.0.can_be_forwarded,
+                ":can_be_saved": &self.0.can_be_saved,
+                ":can_be_deleted_only_for_self": &self.0.can_be_deleted_only_for_self,
+                ":can_be_deleted_for_all_users": &self.0.can_be_deleted_for_all_users,
+                ":can_get_added_reactions": &self.0.can_get_added_reactions,
+                ":can_get_statistics": &self.0.can_get_statistics,
+                ":can_get_message_thread": &self.0.can_get_message_thread,
+                ":can_get_viewers": &self.0.can_get_viewers,
+                ":can_get_media_timestamp_links": &self.0.can_get_media_timestamp_links,
+                ":can_report_reactions": &self.0.can_report_reactions,
+                ":has_timestamped_media": &self.0.has_timestamped_media,
+                ":is_channel_post": &self.0.is_channel_post,
+                ":is_topic_message": &self.0.is_topic_message,
+                ":contains_unread_mention": &self.0.contains_unread_mention,
+                ":date": &self.0.date,
+                ":edit_date": &self.0.edit_date,
+                ":forward_info": &serde_json::to_string(&self.0.forward_info).unwrap(),
+                ":interaction_info": &serde_json::to_string(&self.0.interaction_info).unwrap(),
+                ":unread_reactions": &serde_json::to_string(&self.0.unread_reactions).unwrap(),
+                ":reply_to": &serde_json::to_string(&self.0.reply_to).unwrap(),
+                ":message_thread_id": &self.0.message_thread_id,
+                ":self_destruct_type": &serde_json::to_string(&self.0.self_destruct_type).unwrap(),
+                ":self_destruct_in": &self.0.self_destruct_in,
+                ":auto_delete_in": &self.0.auto_delete_in,
+                ":via_bot_user_id": &self.0.via_bot_user_id,
+                ":author_signature": &self.0.author_signature,
+                ":media_album_id": &self.0.media_album_id,
+                ":restriction_reason": &serde_json::to_string(&self.0.restriction_reason).unwrap(),
+                ":content": &serde_json::to_string(&self.0.content).unwrap(),
+                ":reply_markup": &serde_json::to_string(&self.0.reply_markup).unwrap(),
+            },
+        )?;
+        Ok(())
+    }
+}
+
+fn from_row(row: &rusqlite::Row) -> Result<MessageWrapper, rusqlite::Error> {
+    Ok(MessageWrapper(Message {
+        id: row.get("message_id")?,
+        sender_id: serde_json::from_str(&row.get::<_, String>("sender_id")?).unwrap(),
+        chat_id: row.get("chat_id")?,
+        sending_state: serde_json::from_str(&row.get::<_, String>("sending_state")?).unwrap(),
+        scheduling_state: serde_json::from_str(&row.get::<_, String>("scheduling_state")?).unwrap(),
+        is_outgoing: row.get("is_outgoing")?,
+        is_pinned: row.get("is_pinned")?,
+        can_be_edited: row.get("can_be_edited")?,
+        can_be_forwarded: row.get("can_be_forwarded")?,
+        can_be_saved: row.get("can_be_saved")?,
+        can_be_deleted_only_for_self: row.get("can_be_deleted_only_for_self")?,
+        can_be_deleted_for_all_users: row.get("can_be_deleted_for_all_users")?,
+        can_get_added_reactions: row.get("can_get_added_reactions")?,
+        can_get_statistics: row.get("can_get_statistics")?,
+        can_get_message_thread: row.get("can_get_message_thread")?,
+        can_get_viewers: row.get("can_get_viewers")?,
+        can_get_media_timestamp_links: row.get("can_get_media_timestamp_links")?,
+        can_report_reactions: row.get("can_report_reactions")?,
+        has_timestamped_media: row.get("has_timestamped_media")?,
+        is_channel_post: row.get("is_channel_post")?,
+        is_topic_message: row.get("is_topic_message")?,
+        contains_unread_mention: row.get("contains_unread_mention")?,
+        date: row.get("date")?,
+        edit_date: row.get("edit_date")?,
+        forward_info: serde_json::from_str(&row.get::<_, String>("forward_info")?).unwrap(),
+        interaction_info: serde_json::from_str(&row.get::<_, String>("interaction_info")?).unwrap(),
+        unread_reactions: serde_json::from_str(&row.get::<_, String>("unread_reactions")?).unwrap(),
+        reply_to: serde_json::from_str(&row.get::<_, String>("reply_to")?).unwrap(),
+        message_thread_id: row.get("message_thread_id")?,
+        self_destruct_type: serde_json::from_str(&row.get::<_, String>("self_destruct_type")?)
+            .unwrap(),
+        self_destruct_in: row.get("self_destruct_in")?,
+        auto_delete_in: row.get("auto_delete_in")?,
+        via_bot_user_id: row.get("via_bot_user_id")?,
+        author_signature: row.get("author_signature")?,
+        media_album_id: row.get("media_album_id")?,
+        restriction_reason: serde_json::from_str(&row.get::<_, String>("restriction_reason")?)
+            .unwrap(),
+        content: serde_json::from_str(&row.get::<_, String>("content")?).unwrap(),
+        reply_markup: serde_json::from_str(&row.get::<_, String>("reply_markup")?).unwrap(),
+    }))
 }

@@ -2,13 +2,10 @@ use std::path::Path;
 
 use log::debug;
 use rusqlite::Connection;
-// use serde_rusqlite::to_params_named;
 
 use crate::{
     error::FetishResult,
-    models::{
-        basic_group_wrapper::BasicGroupWrapper, chat_wrapper::ChatWrapper, message_wrapper::MessageWrapper, scammer::Scammer, scouted_chat::ScoutedChat, supergroup_wrapper::SupergroupWrapper, user_wrapper::UserWrapper, AutoRequestable
-    },
+    models::{init_db, AutoRequestable},
 };
 
 pub struct Database {
@@ -22,15 +19,7 @@ impl Database {
     pub fn new(db_path: &Path) -> Result<Self, rusqlite::Error> {
         debug!("Creating database '{}'", db_path.display());
         let conn = Connection::open(db_path)?;
-
-        conn.execute(&BasicGroupWrapper::create_table_request(), rusqlite::params![])?;
-        conn.execute(&ChatWrapper::create_table_request(), rusqlite::params![])?;
-        conn.execute(&MessageWrapper::create_table_request(), rusqlite::params![])?;
-        conn.execute(&Scammer::create_table_request(), rusqlite::params![])?;
-        conn.execute(&ScoutedChat::create_table_request(), rusqlite::params![])?;
-        conn.execute(&SupergroupWrapper::create_table_request(), rusqlite::params![])?;
-        conn.execute(&UserWrapper::create_table_request(), rusqlite::params![])?;
-
+        init_db(&conn)?;
         Ok(Self { conn })
     }
 
@@ -38,11 +27,22 @@ impl Database {
         &self,
         entity: &DatabaseEntity,
     ) -> FetishResult<()> {
-        entity.insert(&self.conn)?;
+        if let Some(_) = DatabaseEntity::select_by_id(entity.get_id(), &self.conn)? {
+            entity.update(&self.conn)?;
+        } else {
+            entity.insert(&self.conn)?;
+        }
         Ok(())
     }
 
-    pub fn load<DatabaseEntity: AutoRequestable>(&self, id: i64) -> FetishResult<Option<DatabaseEntity>> {
+    pub fn load<DatabaseEntity: AutoRequestable<UniqueIdentifier = i64>>(
+        &self,
+        id: i64,
+    ) -> FetishResult<Option<DatabaseEntity>> {
         DatabaseEntity::select_by_id(id, &self.conn)
+    }
+
+    pub fn load_all<DatabaseEntity: AutoRequestable>(&self) -> FetishResult<Vec<DatabaseEntity>> {
+        DatabaseEntity::select_all(&self.conn)
     }
 }
